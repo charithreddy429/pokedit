@@ -10,11 +10,55 @@ from names import *
 script_path = os.getcwd()
 
 BG_PATH = r'assets\background\background12.mp4'
+def pop_lerp(x: float) -> float:
+    if x <= .50:
+        return (2.1 * x) ** 2 + 0.1
+    elif x <= 1:
+        return ((2.1 * (1-x)) ** 2) * (2 - 2 * x) + 1 * (2 * x - 1) + 0.1
+    else:
+        return 1
 
 
-def cut(image):
+def lpop_lerp(x: float) -> float:
+    if x <= .50:
+        return min((2.1 * x) ** 2 + 0.1, 1)
+    elif x <= 1:
+        return min(((2.1 * (1-x)) ** 2) * (2 - 2 * x) + 1 * (2 * x - 1) + 0.1, 1)
+    else:
+        return 1
+
+
+def popeffect(img: np.ndarray, x: float, eff=pop_lerp) -> np.ndarray:
+    new_shape = (int(img.shape[1] * eff(x)), int(img.shape[0] * eff(x)))
+    img = cv2.resize(img, new_shape)  # type: ignore
+    return img
+
+
+def blit(bg: np.ndarray, img: np.ndarray, pos: tuple[int, int]) -> np.ndarray:
+    alpha = img[:, :, 3] / 255.0
+    y1, x1 = pos
+    y2, x2 = pos + np.array(img.shape[0:2])
+    # Paste img onto bg using the alpha channel as a mask
+    bg[y1:y2, x1:x2, 0] = bg[y1:y2, x1:x2, 0] * (1 - alpha) + img[:, :, 0] * alpha
+    bg[y1:y2, x1:x2, 1] = bg[y1:y2, x1:x2, 1] * (1 - alpha) + img[:, :, 1] * alpha
+    bg[y1:y2, x1:x2, 2] = bg[y1:y2, x1:x2, 2] * (1 - alpha) + img[:, :, 2] * alpha
+    return bg
+
+
+def change_size(img: np.ndarray) -> np.ndarray:
+    width, height = img.shape[0:2]
+    new_width = 700
+    new_height = int(height * (700 / width))
+    if not(new_height <= 750):
+        new_height = 750
+        new_width = int(width * (750 / height))
+    print(new_height, new_width)
+    return cv2.resize(img, (new_height, new_width))
+
+
+def cut(image:np.ndarray)->np.ndarray:
     # Get the image size
-    width, height = image.size
+    width, height = image.shape[0:2]
     # Initialize the leftmost, rightmost, topmost, and bottommost pixel
     # coordinates to the image width and height respectively
     leftmost = width
@@ -25,7 +69,7 @@ def cut(image):
     for x in range(width):
         for y in range(height):
             # Get the RGBA values of the pixel
-            r, g, b, a = image.getpixel((x, y))
+            r, g, b, a = image[x, y]
 
             # If the pixel is not transparent
             if a != 0:
@@ -40,65 +84,26 @@ def cut(image):
                     bottommost = y
 
     # Crop the image to the leftmost, rightmost, topmost, and bottommost pixels
-    cropped_image = image.crop((leftmost, topmost, rightmost + 1, bottommost + 1))
-    # Save the cropped image to a file
+    cropped_image = image[leftmost: rightmost + 1, topmost: bottommost + 1]
 
     return cropped_image
 
 
-def neg(img):
-    img = img.convert('RGBA')
-
-    # Convert the image to a NumPy array
-    arr = np.array(img)
-
+def neg(img:np.ndarray)->np.ndarray:
     # Extract the alpha channel
-    alpha = arr[:, :, 3]
+    alpha = img[:, :, 3]
 
     # Create a mask for non-transparent pixels
     mask = alpha > 0
 
     # Replace non-transparent pixels with black
-    arr[mask] = [0, 0, 0, 255]
+    img[mask] = [0, 0, 0, 255]
 
     # Convert the NumPy array back to an image
-    result = Image.fromarray(arr, mode='RGBA')
-    return result
+    return img
 
 
-def resize(image):
-    # Load the image
-    image = image.convert("RGBA")
-    # Get the size of the image
-    width, height = image.size
-
-    # Calculate the new size
-    new_width = 700
-    new_height = int(height * (700 / width))
-    if not (new_height <= 1330):
-        new_height = 1330
-        new_width = int(width * (1330 / height))
-    print(new_height, new_width)
-
-    # Resize the image
-    resized_image = image.resize((new_width, new_height))
-
-    # Create a new image with a white background
-    new_image = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-
-    # Calculate the position to paste the resized image
-    x = int((1080 - new_width) / 2)
-    y = int((1330 - new_height / 2))
-
-    # Paste the resized image onto the new image
-    # new_image.paste(resized_image, (x, y))
-    new_image.paste(resized_image, (x, y), mask=resized_image.split()[3])
-    # Save the new image
-
-    return new_image
-
-
-def paste(image, neg_img, out_path: str) -> ():
+def paste(image:np.ndarray, neg_img:np.ndarray, out_path: str) ->None:
     # Open the video file
     cap = cv2.VideoCapture(BG_PATH)
     bg_img = np.array(neg_img)
@@ -157,7 +162,47 @@ def paste(image, neg_img, out_path: str) -> ():
     cv2.destroyAllWindows()
 
 
-def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: str):
+def create_vid(image:np.ndarray,neg:np.ndarray,out_path:str)->None:
+    def calculate_frame1(frame,x):
+        poped = popeffect(neg,6*x)
+        frame = blit(frame,poped,(1296,540)-(0.5*np.array(poped.shape[0:2])).astype(int))# type: ignore
+        return frame
+    def calculate_frame2(x):
+        frame = np.full((1920, 1080, 4), (255, 255, 255,255), dtype=np.uint8)
+        popedi = popeffect(image,6*x)
+        poped = popeffect(np.full((192, 1080, 4),(0,0,0,255),dtype=np.uint8),12*x,lpop_lerp)
+        frame = blit(frame,poped,(96,540)-(0.5*np.array(poped.shape[0:2])).astype(int))# type: ignore
+        frame = blit(frame,poped,(1824,540)-(0.5*np.array(poped.shape[0:2])).astype(int)) # type: ignore
+        frame = blit(frame,popedi,(1296,540)-(0.5*np.array(popedi.shape[0:2])).astype(int))# type: ignore
+        return frame[:,:,0:3]
+    neg = change_size(neg)
+    image = change_size(image)
+    cap = cv2.VideoCapture(BG_PATH)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+    counter = 0
+    while cap.isOpened():
+        counter +=1
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+        frame = calculate_frame1(frame,counter/frame_count)
+        out.write(frame)
+    counter =0
+    for i in range(120):
+        counter+=1
+        out.write(calculate_frame2(counter/120))
+    cap.release()
+    out.release()
+
+
+def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: str)->None:
     with VideoFileClip(vid_path) as video:
         final_clip = None
         last_end_time = 0
@@ -199,31 +244,13 @@ def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: s
 
         final_clip.write_videofile(output_file)
 
-    def create_whole(num):
-        print(num)
-        img = Image.open(f"ik\\{num}.png")
-        ct = cut(img)
-        re = resize(ct)
-        ne = neg(re)
-        ct.save(f"re\\{num}c.png")
-        re.save(f"re\\{num}.png")
-        ne.save(f"re\\{num}n.png")
-        paste(f"re\\{num}.png", f"re\\{num}n.png", f"vid\\vid{num}.mp4")
 
-
-def create_whole(num):
-    img = Image.open(f"ik\{num}.png")
+def create_whole(num:int)->None:
+    img = cv2.imread(f"ik\\{num}.png",cv2.IMREAD_UNCHANGED)
     ct = cut(img)
-    re = resize(ct)
-    ne = neg(re)
-    paste(re, ne, f"vid\vid{num}.mp4")
+    ne = neg(ct.copy())
+    create_vid(ct,ne,f"vid\\vid{num}.mp4")
 
 
 if __name__ == "__main__":
-
-    for num in tqdm.tqdm(range(1, 3)):
-        create_whole(num)
-        audioarr = ["assets\\sounds\\guess.mp3",
-                    save_speech(f"it's {names[num - 1]}", f"assets\\sounds\\{num}.mp3"),
-                    "assets\\sounds\\plz.mp3"]
-        addsound(f"vid\\vid{num}.mp4", audioarr, [0, 3.1, 5.2], f"vid\\vid{num}t.mp4")
+    pass

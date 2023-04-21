@@ -3,4 +3,12 @@ vid/
 .idea/
 ik/
 re/
-assets/
+assets/sounds/
+!assets/sounds/plz.mp3
+!assets/sounds/guess.mp3
+.vscode/settings.json
+__pycache__/names.cpython-311.pyc
+__pycache__/voice.cpython-311.pyc
+sad.png
+tem.py
+temp.py
