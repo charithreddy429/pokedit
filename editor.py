@@ -52,7 +52,6 @@ def change_size(img: np.ndarray) -> np.ndarray:
     if not(new_height <= 750):
         new_height = 750
         new_width = int(width * (750 / height))
-    print(new_height, new_width)
     return cv2.resize(img, (new_height, new_width))
 
 
@@ -202,9 +201,9 @@ def create_vid(image:np.ndarray,neg:np.ndarray,out_path:str)->None:
     out.release()
 
 
-def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: str)->None:
+def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: str,bg_music=None)->None:
     with VideoFileClip(vid_path) as video:
-        final_clip = None
+        final_clip = None  # type: ignore
         last_end_time = 0
         for i in range(len(sound_paths)):
             sound_path = sound_paths[i]
@@ -240,8 +239,11 @@ def addsound(vid_path: str, sound_paths: list, start_times: list, output_file: s
         # add the final section of the video
         if last_end_time < video.duration:
             clip = video.subclip(last_end_time, video.duration)
-            final_clip = concatenate_videoclips([final_clip, clip])
-
+            final_clip:VideoClip = concatenate_videoclips([final_clip, clip])
+        if bg_music:
+            bg_clip = AudioFileClip(bg_music).subclip(0,final_clip.duration)
+            final_audio = CompositeAudioClip([final_clip.audio, bg_clip])
+            final_clip.audio = final_audio
         final_clip.write_videofile(output_file)
 
 
@@ -253,4 +255,9 @@ def create_whole(num:int)->None:
 
 
 if __name__ == "__main__":
-    pass
+    for num in tqdm.tqdm(range(25, 30)):
+        create_whole(num)
+        audioarr = ["assets\\sounds\\guess.mp3",
+                    save_speech(f"it's {names[num - 1]}", f"assets\\sounds\\{num}.mp3"),
+                    "assets\\sounds\\plz.mp3"]
+        addsound(f"vid\\vid{num}.mp4", audioarr, [0, 3.1, 5.2], f"vid\\vid{num}t.mp4")

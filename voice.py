@@ -14,8 +14,8 @@ def save_speech(speech: str, out_path: str)->str:
     # Play the speech
     engine.runAndWait()
     return out_path
-def say_speech(speech:str)->None:
-    
+def say_speech(speech:str,ind=1)->None:
+    engine.setProperty('voice', voices[ind].id)  # You can change the index number to select a different voice
     # Convert text to speech and save to file
     engine.say(speech)
 
